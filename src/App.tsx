@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, Merge, Split, Compass as Compress, RotateCw, Upload, Download, ArrowLeft, CheckCircle, Zap } from 'lucide-react';
+import { FileText, Merge, Split, Compass as Compress, RotateCw, Upload, Download, ArrowLeft, CheckCircle, Zap, XCircle } from 'lucide-react';
 
 interface Tool {
   id: string;
@@ -9,6 +9,7 @@ interface Tool {
   color: string;
   bgColor: string;
   borderColor: string;
+  buttonGradient: string;
 }
 
 const tools: Tool[] = [
@@ -19,7 +20,8 @@ const tools: Tool[] = [
     icon: <Merge className="w-6 h-6" />,
     color: 'text-blue-600',
     bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-200'
+    borderColor: 'border-blue-200',
+    buttonGradient: 'bg-gradient-to-r from-blue-500 to-blue-600'
   },
   {
     id: 'split',
@@ -28,7 +30,8 @@ const tools: Tool[] = [
     icon: <Split className="w-6 h-6" />,
     color: 'text-green-600',
     bgColor: 'bg-green-50',
-    borderColor: 'border-green-200'
+    borderColor: 'border-green-200',
+    buttonGradient: 'bg-gradient-to-r from-green-500 to-green-600'
   },
   {
     id: 'compress',
@@ -37,7 +40,8 @@ const tools: Tool[] = [
     icon: <Compress className="w-6 h-6" />,
     color: 'text-purple-600',
     bgColor: 'bg-purple-50',
-    borderColor: 'border-purple-200'
+    borderColor: 'border-purple-200',
+    buttonGradient: 'bg-gradient-to-r from-purple-500 to-purple-600'
   },
   {
     id: 'convert',
@@ -46,7 +50,8 @@ const tools: Tool[] = [
     icon: <RotateCw className="w-6 h-6" />,
     color: 'text-orange-600',
     bgColor: 'bg-orange-50',
-    borderColor: 'border-orange-200'
+    borderColor: 'border-orange-200',
+    buttonGradient: 'bg-gradient-to-r from-orange-500 to-orange-600'
   }
 ];
 
@@ -55,18 +60,48 @@ function App() {
   const [files, setFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(event.target.files || []);
-    setFiles(selectedFiles);
+    const newFiles = Array.from(event.target.files || []);
+    setFiles(prevFiles => [...prevFiles, ...newFiles]);
+  };
+
+  const removeFile = (indexToRemove: number) => {
+    setFiles(prevFiles => prevFiles.filter((_, index) => index !== indexToRemove));
   };
 
   const handleProcess = async () => {
+    if (!selectedTool) return;
+
     setIsProcessing(true);
-    // Simulate processing
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setIsProcessing(false);
-    setIsComplete(true);
+    setDownloadUrl(null);
+
+    const formData = new FormData();
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+
+    try {
+      const response = await fetch(`http://localhost:3001/${selectedTool}`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Processing failed');
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      setDownloadUrl(url);
+      setIsComplete(true);
+    } catch (error) { 
+      console.error('Error processing files:', error);
+      // Here you could set an error state and display a message to the user
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const resetTool = () => {
@@ -147,8 +182,11 @@ function App() {
                       {files.map((file, index) => (
                         <div key={index} className="flex items-center p-3 bg-gray-50 rounded-lg">
                           <FileText className="w-5 h-5 text-red-500 mr-3" />
-                          <span className="text-gray-700 flex-1">{file.name}</span>
-                          <span className="text-gray-500 text-sm">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                          <span className="text-gray-700 flex-1 truncate pr-2">{file.name}</span>
+                          <span className="text-gray-500 text-sm mr-3">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                          <button onClick={() => removeFile(index)} className="text-gray-400 hover:text-gray-600">
+                            <XCircle className="w-5 h-5" />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -160,11 +198,12 @@ function App() {
                   <button
                     onClick={handleProcess}
                     disabled={files.length === 0 || isProcessing}
-                    className={`inline-flex items-center px-6 py-3 rounded-lg font-medium transition-all ${
-                      files.length === 0 || isProcessing
+                    className={
+                      'inline-flex items-center px-6 py-3 rounded-lg font-medium transition-all ' +
+                      (files.length === 0 || isProcessing
                         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        : `${selectedToolData.color} bg-gradient-to-r from-${selectedTool}-500 to-${selectedTool}-600 text-white hover:shadow-lg transform hover:scale-105`
-                    }`}
+                        : selectedToolData.buttonGradient + ' text-white hover:shadow-lg transform hover:scale-105')
+                    }
                   >
                     {isProcessing ? (
                       <>
@@ -187,10 +226,16 @@ function App() {
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">Processing Complete!</h3>
                 <p className="text-gray-600 mb-6">Your PDF has been successfully processed.</p>
                 <div className="space-y-3">
-                  <button className="inline-flex items-center px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors">
-                    <Download className="w-5 h-5 mr-2" />
-                    Download Result
-                  </button>
+                  {downloadUrl && (
+                    <a
+                      href={downloadUrl}
+                      download={`${selectedTool}-result.pdf`}
+                      className="inline-flex items-center px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors"
+                    >
+                      <Download className="w-5 h-5 mr-2" />
+                      Download Result
+                    </a>
+                  )}
                   <div>
                     <button
                       onClick={resetTool}
