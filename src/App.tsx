@@ -60,11 +60,16 @@ function App() {
   const [files, setFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+    const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [splitRanges, setSplitRanges] = useState('');
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newFiles = Array.from(event.target.files || []);
-    setFiles(prevFiles => [...prevFiles, ...newFiles]);
+    if (selectedTool === 'merge') {
+      setFiles(prevFiles => [...prevFiles, ...newFiles]);
+    } else {
+      setFiles(newFiles);
+    }
   };
 
   const removeFile = (indexToRemove: number) => {
@@ -78,9 +83,21 @@ function App() {
     setDownloadUrl(null);
 
     const formData = new FormData();
-    files.forEach(file => {
-      formData.append('files', file);
-    });
+
+    if (selectedTool === 'merge') {
+      files.forEach(file => {
+        formData.append('files', file);
+      });
+    } else if (selectedTool === 'split') {
+      if (files.length > 0) {
+        formData.append('file', files[0]);
+      }
+      formData.append('ranges', splitRanges);
+    } else if (selectedTool === 'compress') {
+      if (files.length > 0) {
+        formData.append('file', files[0]);
+      }
+    }
 
     try {
       const response = await fetch(`http://localhost:3001/${selectedTool}`, {
@@ -89,14 +106,15 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error('Processing failed');
+        const errorText = await response.text();
+        throw new Error(`Processing failed: ${errorText}`);
       }
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       setDownloadUrl(url);
       setIsComplete(true);
-    } catch (error) { 
+    } catch (error) {
       console.error('Error processing files:', error);
       // Here you could set an error state and display a message to the user
     } finally {
@@ -109,9 +127,13 @@ function App() {
     setFiles([]);
     setIsProcessing(false);
     setIsComplete(false);
+    setDownloadUrl(null);
+    setSplitRanges('');
   };
 
   const selectedToolData = tools.find(tool => tool.id === selectedTool);
+
+  const isButtonDisabled = files.length === 0 || isProcessing || (selectedTool === 'split' && !splitRanges);
 
   if (selectedTool && selectedToolData) {
     return (
@@ -169,7 +191,7 @@ function App() {
                       </label>
                     </div>
                     <p className="text-gray-500">
-                      {selectedTool === 'merge' ? 'Upload multiple PDF files' : 'Upload your PDF file'}
+                      {selectedTool === 'merge' ? 'Upload multiple PDF files' : 'Upload a single PDF file'}
                     </p>
                   </div>
                 </div>
@@ -193,17 +215,37 @@ function App() {
                   </div>
                 )}
 
+                {/* Split Ranges Input */}
+                {selectedTool === 'split' && files.length > 0 && (
+                  <div className="mb-6">
+                    <label htmlFor="split-ranges" className="block text-lg font-medium text-gray-900 mb-3">
+                      Pages to Extract
+                    </label>
+                    <input
+                      type="text"
+                      id="split-ranges"
+                      value={splitRanges}
+                      onChange={(e) => setSplitRanges(e.target.value)}
+                      placeholder="e.g., 1-3, 5, 8"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                    <p className="text-sm text-gray-500 mt-2">
+                      Enter page numbers or ranges separated by commas.
+                    </p>
+                  </div>
+                )}
+
                 {/* Process Button */}
                 <div className="text-center">
                   <button
                     onClick={handleProcess}
-                    disabled={files.length === 0 || isProcessing}
-                    className={
-                      'inline-flex items-center px-6 py-3 rounded-lg font-medium transition-all ' +
-                      (files.length === 0 || isProcessing
+                    disabled={isButtonDisabled}
+                    className={[
+                      'inline-flex items-center px-6 py-3 rounded-lg font-medium transition-all',
+                      isButtonDisabled
                         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        : selectedToolData.buttonGradient + ' text-white hover:shadow-lg transform hover:scale-105')
-                    }
+                        : selectedToolData.buttonGradient + ' text-white hover:shadow-lg transform hover:scale-105',
+                    ].join(' ')}
                   >
                     {isProcessing ? (
                       <>
